@@ -2,7 +2,7 @@
 
 TypeScript MCP server for NightScout CGM (Continuous Glucose Monitor) data access with JWT authentication using HTTP transport.
 
-> [!WARN]
+> [!CAUTION]
 > ⚠️ **BETA SOFTWARE WARNING**  
 > This project is in **beta** and is provided **as-is** without warranty of any kind. Use at your own risk. Documentation is incomplete and testing coverage is limited. There are known bugs. This software is not intended for production medical or critical use. Always verify glucose data through approved medical devices.
 
