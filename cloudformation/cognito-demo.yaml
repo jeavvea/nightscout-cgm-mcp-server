@@ -1,0 +1,115 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: Cognito (demo) for Nightscout MCP in eu-west-1 — User Pool, custom attrs, app client, hosted UI domain.
+
+Parameters:
+  PoolName:
+    Type: String
+    Default: nightscout-mcp-demo-pool
+  DomainPrefix:
+    Type: String
+    Description: Globally unique prefix for Cognito Hosted UI domain
+    Default: nightscout-mcp-demo
+  CallbackURL:
+    Type: String
+    Description: OAuth2 callback URL (Authorization Code + PKCE)
+    Default: http://localhost:8000/callback
+  ClaudeCallbackURL:
+    Type: String
+    Description: Claude Desktop OAuth2 callback URL
+    Default: https://claude.ai/api/mcp/auth_callback
+  VSCodeCallbackURL:
+    Type: String
+    Description: VS Code OAuth2 callback URL
+    Default: vscode://github.copilot-mcp/callback
+  LogoutURL:
+    Type: String
+    Description: Logout redirect URL
+    Default: http://localhost:8000/
+
+Metadata:
+  Notes:
+    Region: "This stack must be deployed in eu-west-1."
+
+Resources:
+  UserPool:
+    Type: AWS::Cognito::UserPool
+    Properties:
+      UserPoolName: !Ref PoolName
+      Schema:
+        - Name: nightscout_base_url
+          AttributeDataType: String
+          Mutable: true
+          Required: false
+          StringAttributeConstraints:
+            MinLength: '1'
+            MaxLength: '512'
+        - Name: nightscout_token
+          AttributeDataType: String
+          Mutable: true
+          Required: false
+          StringAttributeConstraints:
+            MinLength: '1'
+            MaxLength: '1024'
+      AutoVerifiedAttributes:
+        - email
+      UsernameConfiguration:
+        CaseSensitive: false
+      Policies:
+        PasswordPolicy:
+          MinimumLength: 8
+          RequireLowercase: true
+          RequireNumbers: true
+          RequireSymbols: false
+          RequireUppercase: true
+      AccountRecoverySetting:
+        RecoveryMechanisms:
+          - Name: verified_email
+            Priority: 1
+
+  UserPoolClient:
+    Type: AWS::Cognito::UserPoolClient
+    Properties:
+      UserPoolId: !Ref UserPool
+      ClientName: nightscout-mcp-backend
+      GenerateSecret: false
+      AllowedOAuthFlowsUserPoolClient: true
+      AllowedOAuthFlows:
+        - code
+      AllowedOAuthScopes:
+        - openid
+        - email
+        - profile
+      CallbackURLs:
+        - !Ref CallbackURL
+        - !Ref ClaudeCallbackURL
+        - !Ref VSCodeCallbackURL
+      LogoutURLs:
+        - !Ref LogoutURL
+      SupportedIdentityProviders:
+        - COGNITO
+      PreventUserExistenceErrors: ENABLED
+      AccessTokenValidity: 5
+      IdTokenValidity: 5
+      TokenValidityUnits:
+        AccessToken: minutes
+        IdToken: minutes
+      ExplicitAuthFlows:
+        - ALLOW_REFRESH_TOKEN_AUTH
+
+  UserPoolDomain:
+    Type: AWS::Cognito::UserPoolDomain
+    Properties:
+      Domain: !Ref DomainPrefix
+      UserPoolId: !Ref UserPool
+
+Outputs:
+  UserPoolId:
+    Value: !Ref UserPool
+  UserPoolRegion:
+    Value: eu-west-1
+  AppClientId:
+    Value: !Ref UserPoolClient
+  IssuerUrl:
+    Value: !Sub "https://cognito-idp.eu-west-1.amazonaws.com/${UserPool}"
+  JWKSUrl:
+    Value: !Sub "https://cognito-idp.eu-west-1.amazonaws.com/${UserPool}/.well-known/jwks.json"

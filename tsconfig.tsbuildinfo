@@ -1,0 +1,1 @@
+{"root":["./src/auth-cognito.ts","./src/cognito-attrs.ts","./src/config.ts","./src/index.ts","./src/nightscout-client.ts","./src/types.ts"],"version":"5.9.3"}

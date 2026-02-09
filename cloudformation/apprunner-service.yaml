@@ -1,0 +1,157 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: >-
+  App Runner service for nightscout-mcp-server using an image from Amazon ECR,
+  with environment variables and IAM roles (AccessRole for ECR and InstanceRole for the app).
+
+Parameters:
+  ServiceName:
+    Type: String
+    Default: nightscout-mcp-server
+    Description: Name of the App Runner service.
+    MinLength: 4
+    MaxLength: 40
+  ECRImageIdentifier:
+    Type: String
+    Description: >-
+      Full image identifier in ECR, including tag, for example
+      123456789012.dkr.ecr.eu-west-1.amazonaws.com/nightscout-mcp-server:latest-amd64
+    Default: 123456789012.dkr.ecr.eu-west-1.amazonaws.com/mcp-server:latest-amd64
+  ContainerPort:
+    Type: Number
+    Default: 8000
+    Description: Container port your application listens on.
+  Cpu:
+    Type: String
+    Default: "1 vCPU"
+    AllowedValues: ["1 vCPU", "2 vCPU"]
+    Description: vCPU size for App Runner instances.
+  Memory:
+    Type: String
+    Default: "2 GB"
+    AllowedValues: ["2 GB", "3 GB", "4 GB"]
+    Description: Memory size for App Runner instances.
+
+  CognitoRegion:
+    Type: String
+    Default: eu-west-1
+    Description: AWS Region for Amazon Cognito.
+  CognitoUserPoolId:
+    Type: String
+    Default: eu-west-1_XXXXXXXXX
+    Description: Cognito User Pool ID.
+  CognitoAppClientId:
+    Type: String
+    Default: your-app-client-id
+    Description: Cognito App Client ID (audience).
+  CognitoIssuer:
+    Type: String
+    Default: https://cognito-idp.eu-west-1.amazonaws.com/eu-west-1_XXXXXXXXX
+    Description: Issuer URL for the Cognito User Pool.
+  CognitoDomain:
+    Type: String
+    Default: nightscout-mcp-demo.auth.eu-west-1.amazoncognito.com
+    Description: Cognito domain for OAuth flows.
+
+  UseHttps:
+    Type: String
+    AllowedValues: ["true", "false"]
+    Default: "false"
+    Description: Whether to enable HTTPS inside the app (string boolean).
+  LogLevel:
+    Type: String
+    Default: debug
+    AllowedValues: [trace, debug, info, warn, error]
+    Description: Log level for the application.
+
+Resources:
+  # IAM role that App Runner uses to pull images from private ECR
+  ECRAccessRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub "${ServiceName}-apprunner-ecr-access"
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: build.apprunner.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AWSAppRunnerServicePolicyForECRAccess
+      Tags:
+        - Key: app
+          Value: !Ref ServiceName
+
+  # IAM role assumed by running App Runner instances (your application code)
+  AppRunnerInstanceRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub "${ServiceName}-apprunner-instance"
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: tasks.apprunner.amazonaws.com
+            Action: sts:AssumeRole
+      # No default permissions attached; add inline/managed policies if your app needs AWS access
+      Tags:
+        - Key: app
+          Value: !Ref ServiceName
+
+  AppRunnerService:
+    Type: AWS::AppRunner::Service
+    Properties:
+      ServiceName: !Ref ServiceName
+      HealthCheckConfiguration:
+        Protocol: HTTP
+        Path: /health
+        Interval: 5
+        Timeout: 5
+        HealthyThreshold: 1
+        UnhealthyThreshold: 5
+      SourceConfiguration:
+        AuthenticationConfiguration:
+          AccessRoleArn: !GetAtt ECRAccessRole.Arn
+        AutoDeploymentsEnabled: true
+        ImageRepository:
+          ImageIdentifier: !Ref ECRImageIdentifier
+          ImageRepositoryType: ECR
+          ImageConfiguration:
+            Port: !Ref ContainerPort
+            RuntimeEnvironmentVariables:
+              - Name: HOST
+                Value: 0.0.0.0
+              - Name: PORT
+                Value: !Ref ContainerPort
+              - Name: COGNITO_REGION
+                Value: !Ref CognitoRegion
+              - Name: COGNITO_USER_POOL_ID
+                Value: !Ref CognitoUserPoolId
+              - Name: COGNITO_APP_CLIENT_ID
+                Value: !Ref CognitoAppClientId
+              - Name: COGNITO_ISSUER
+                Value: !Ref CognitoIssuer
+              - Name: COGNITO_DOMAIN
+                Value: !Ref CognitoDomain
+              - Name: USE_HTTPS
+                Value: !Ref UseHttps
+              - Name: LOG_LEVEL
+                Value: !Ref LogLevel
+      InstanceConfiguration:
+        Cpu: !Ref Cpu
+        Memory: !Ref Memory
+        InstanceRoleArn: !GetAtt AppRunnerInstanceRole.Arn
+      NetworkConfiguration:
+        EgressConfiguration:
+          EgressType: DEFAULT
+        IngressConfiguration:
+          IsPubliclyAccessible: true
+
+Outputs:
+  ServiceArn:
+    Description: ARN of the App Runner service
+    Value: !Ref AppRunnerService
+  ServiceUrl:
+    Description: Public URL of the App Runner service
+    Value: !GetAtt AppRunnerService.ServiceUrl
